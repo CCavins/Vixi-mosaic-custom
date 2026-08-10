@@ -1,0 +1,27 @@
+{
+  "name": "@thefamousgroup/vixi2-components",
+  "version": "2.26.0",
+  "type": "module",
+  "description": "Vendored build of the vixi2 components library (dist only).",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/vixi2-components.d.ts",
+      "import": "./dist/vixi2-components.js"
+    },
+    "./style.css": "./dist/vixi2-components.css"
+  },
+  "sideEffects": [
+    "*.css"
+  ],
+  "module": "./dist/vixi2-components.js",
+  "types": "./dist/vixi2-components.d.ts",
+  "peerDependencies": {
+    "pinia": "^3.0.1",
+    "vue": "^3.5.13",
+    "vue-i18n": "^10.0.5",
+    "vuedraggable": "^4.1.0"
+  }
+}
