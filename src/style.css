@@ -140,48 +140,89 @@ body,
 
 .thumb-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
-  gap: 6px;
-  max-height: 220px;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  /* Explicit row height: thumbnails can never collapse or overlap. */
+  grid-auto-rows: 110px;
+  gap: 8px;
+  max-height: 360px;
   overflow-y: auto;
+  padding-right: 2px;
+}
+
+.thumb-grid::-webkit-scrollbar {
+  width: 8px;
+}
+.thumb-grid::-webkit-scrollbar-thumb {
+  background: rgb(var(--v-theme-border-gray));
+  border-radius: 4px;
 }
 
 .thumb {
   position: relative;
-  aspect-ratio: 1;
-  border-radius: 4px;
+  height: 100%;
+  border-radius: 6px;
   overflow: hidden;
   background: rgb(var(--v-theme-surface));
+  border: 1px solid transparent;
+}
+
+.thumb:hover {
+  border-color: rgb(var(--v-theme-light-gray-100));
 }
 
 .thumb img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
+.thumb-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 4px 3px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.thumb:hover .thumb-name {
+  opacity: 1;
+}
+
 .thumb-remove {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 18px;
-  height: 18px;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
   border: none;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.65);
   color: #fff;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1;
   cursor: pointer;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition: background-color 120ms ease;
 }
 
-.thumb:hover .thumb-remove {
-  display: flex;
+.thumb-remove:hover {
+  background: rgb(var(--v-theme-error));
 }
 
 .lib-footer {

@@ -101,7 +101,7 @@ export const useLibraryStore = defineStore('library', {
       this.initialized = true
     },
 
-    async addFiles(files: Iterable<File>) {
+    async addFiles(files: Iterable<File>): Promise<number> {
       const stored = (await db.getUploads()) ?? []
       const added: StoredUpload[] = []
       const decoded: MosaicImage[] = []
@@ -125,6 +125,7 @@ export const useLibraryStore = defineStore('library', {
       // Push in one batch so the mosaic reshuffles once, not per file.
       if (decoded.length) this.images.push(...decoded)
       if (added.length) await db.setUploads([...stored, ...added])
+      return decoded.length
     },
 
     async removeImage(id: string) {
@@ -149,17 +150,29 @@ export const useLibraryStore = defineStore('library', {
       await this.disconnectFolder()
     },
 
-    async linkFolder() {
+    /** Returns the number of images found, or null if the user cancelled the picker. */
+    async linkFolder(): Promise<number | null> {
+      let handle: FileSystemDirectoryHandle
       try {
-        const handle = await window.showDirectoryPicker({ id: 'mosaic-images' })
-        this.dirHandle = handle
-        this.folderName = handle.name
-        this.folderNeedsReconnect = false
-        await db.setDirHandle(handle)
-        await this.scanFolder()
+        handle = await window.showDirectoryPicker({ id: 'mosaic-images' })
       } catch (err) {
-        if ((err as DOMException)?.name !== 'AbortError') throw err
+        if ((err as DOMException)?.name === 'AbortError') return null
+        throw err
       }
+      return this.adoptFolderHandle(handle)
+    },
+
+    /** Link a folder from an existing handle (picker or drag-and-drop). */
+    async adoptFolderHandle(handle: FileSystemDirectoryHandle): Promise<number> {
+      this.dirHandle = handle
+      this.folderName = handle.name
+      this.folderNeedsReconnect = false
+      try {
+        await db.setDirHandle(handle)
+      } catch {
+        // Persisting the handle is best-effort; the session still works.
+      }
+      return this.scanFolder()
     },
 
     async reconnectFolder() {
@@ -171,9 +184,9 @@ export const useLibraryStore = defineStore('library', {
       }
     },
 
-    async scanFolder() {
+    async scanFolder(): Promise<number> {
       const handle = this.dirHandle
-      if (!handle) return
+      if (!handle) return 0
       this.removeFolderImages()
       const decoded: MosaicImage[] = []
       try {
@@ -197,6 +210,7 @@ export const useLibraryStore = defineStore('library', {
         this.folderNeedsReconnect = true
       }
       if (decoded.length) this.images.push(...decoded)
+      return decoded.length
     },
 
     async disconnectFolder() {
