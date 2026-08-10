@@ -10,8 +10,18 @@ export interface MosaicImage {
 }
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif|bmp)$/i
+/** iPhone photo formats that browsers cannot decode; counted so we can explain empty scans. */
+const HEIC_EXT = /\.(heic|heif)$/i
 /** Tiles never render larger than this, so cap decoded size to keep memory sane. */
 const MAX_TILE_DECODE = 1280
+const MAX_FOLDER_DEPTH = 4
+const MAX_FOLDER_IMAGES = 2000
+
+export interface ScanResult {
+  added: number
+  failed: number
+  heic: number
+}
 
 async function decodeBitmap(blob: Blob, maxSize?: number): Promise<ImageBitmap> {
   const full = await createImageBitmap(blob)
@@ -150,8 +160,8 @@ export const useLibraryStore = defineStore('library', {
       await this.disconnectFolder()
     },
 
-    /** Returns the number of images found, or null if the user cancelled the picker. */
-    async linkFolder(): Promise<number | null> {
+    /** Returns the scan result, or null if the user cancelled the picker. */
+    async linkFolder(): Promise<ScanResult | null> {
       let handle: FileSystemDirectoryHandle
       try {
         handle = await window.showDirectoryPicker({ id: 'mosaic-images' })
@@ -163,7 +173,7 @@ export const useLibraryStore = defineStore('library', {
     },
 
     /** Link a folder from an existing handle (picker or drag-and-drop). */
-    async adoptFolderHandle(handle: FileSystemDirectoryHandle): Promise<number> {
+    async adoptFolderHandle(handle: FileSystemDirectoryHandle): Promise<ScanResult> {
       this.dirHandle = handle
       this.folderName = handle.name
       this.folderNeedsReconnect = false
@@ -184,33 +194,48 @@ export const useLibraryStore = defineStore('library', {
       }
     },
 
-    async scanFolder(): Promise<number> {
+    async scanFolder(): Promise<ScanResult> {
       const handle = this.dirHandle
-      if (!handle) return 0
+      const result: ScanResult = { added: 0, failed: 0, heic: 0 }
+      if (!handle) return result
       this.removeFolderImages()
       const decoded: MosaicImage[] = []
-      try {
-        for await (const entry of handle.values()) {
-          if (entry.kind !== 'file' || !IMAGE_EXT.test(entry.name)) continue
-          try {
-            const file = await entry.getFile()
-            const bitmap = await decodeBitmap(file, MAX_TILE_DECODE)
-            decoded.push({
-              id: `folder:${entry.name}`,
-              name: entry.name,
-              bitmap,
-              thumbUrl: URL.createObjectURL(file),
-              source: 'folder',
-            })
-          } catch {
-            // Skip unreadable/undecodable files.
+
+      const walk = async (dir: FileSystemDirectoryHandle, prefix: string, depth: number) => {
+        try {
+          for await (const entry of dir.values()) {
+            if (decoded.length >= MAX_FOLDER_IMAGES) return
+            if (entry.kind === 'directory') {
+              if (depth < MAX_FOLDER_DEPTH) {
+                await walk(entry, `${prefix}${entry.name}/`, depth + 1)
+              }
+            } else if (HEIC_EXT.test(entry.name)) {
+              result.heic++
+            } else if (IMAGE_EXT.test(entry.name)) {
+              try {
+                const file = await entry.getFile()
+                const bitmap = await decodeBitmap(file, MAX_TILE_DECODE)
+                decoded.push({
+                  id: `folder:${prefix}${entry.name}`,
+                  name: entry.name,
+                  bitmap,
+                  thumbUrl: URL.createObjectURL(file),
+                  source: 'folder',
+                })
+              } catch {
+                result.failed++
+              }
+            }
           }
+        } catch {
+          if (depth === 0) this.folderNeedsReconnect = true
         }
-      } catch {
-        this.folderNeedsReconnect = true
       }
+
+      await walk(handle, '', 0)
       if (decoded.length) this.images.push(...decoded)
-      return decoded.length
+      result.added = decoded.length
+      return result
     },
 
     async disconnectFolder() {

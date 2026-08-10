@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { VS2Button, VS2CollapsableCard, useNotifications } from '@thefamousgroup/vixi2-components'
-import { useLibraryStore } from '@/stores/library'
+import { useLibraryStore, type ScanResult } from '@/stores/library'
 
 const library = useLibraryStore()
 const notify = useNotifications()
@@ -9,6 +9,12 @@ const open = ref(true)
 const fileInput = ref<HTMLInputElement | null>(null)
 const folderInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
+
+// Embedded Chromium (e.g. the Cursor/VS Code browser) exposes showDirectoryPicker
+// but linked-folder handles cannot be read back, so prefer the plain directory
+// file dialog there. Real Chrome/Edge keep live folder linking.
+const IS_EMBEDDED = navigator.userAgent.includes('Electron')
+const pickerBroken = ref(IS_EMBEDDED || !library.folderSupported)
 
 async function addFiles(files: Iterable<File>): Promise<number> {
   try {
@@ -21,9 +27,20 @@ async function addFiles(files: Iterable<File>): Promise<number> {
   }
 }
 
-function notifyScanResult(count: number) {
-  if (count > 0) {
-    notify.success(`Loaded ${count} image${count === 1 ? '' : 's'} from "${library.folderName}".`)
+function notifyScanResult(result: ScanResult) {
+  const skipped = result.failed + result.heic
+  if (result.added > 0) {
+    notify.success(
+      `Loaded ${result.added} image${result.added === 1 ? '' : 's'} from "${library.folderName}"` +
+        (skipped ? ` (${skipped} unsupported file${skipped === 1 ? '' : 's'} skipped)` : '') +
+        '.',
+    )
+  } else if (result.heic > 0) {
+    notify.error(
+      `Found ${result.heic} HEIC photo${result.heic === 1 ? '' : 's'} - browsers cannot display HEIC. Convert them to JPG first.`,
+    )
+  } else if (result.failed > 0) {
+    notify.error('Found image files, but none of them could be decoded.')
   } else {
     notify.error(`No images found in "${library.folderName}". Supported: png, jpg, webp, gif, avif, bmp.`)
   }
@@ -31,13 +48,21 @@ function notifyScanResult(count: number) {
 
 async function onLinkFolder() {
   try {
-    const count = await library.linkFolder()
-    if (count !== null) notifyScanResult(count)
+    const result = await library.linkFolder()
+    if (result === null) return
+    if (result.added === 0 && result.failed === 0 && result.heic === 0) {
+      // Either the folder is truly empty, or this environment cannot read
+      // linked folders back. Switch to the import path either way.
+      pickerBroken.value = true
+      await library.disconnectFolder()
+      notify.error('Could not read images from that folder here. Click the button again to import the folder instead.')
+      return
+    }
+    notifyScanResult(result)
   } catch (err) {
-    // Some environments (e.g. embedded browsers) expose showDirectoryPicker but
-    // cannot open the native dialog. Fall back to a directory file input.
     console.error(err)
-    folderInput.value?.click()
+    pickerBroken.value = true
+    notify.error('Folder linking is not supported in this browser. Click the button again to import the folder instead.')
   }
 }
 
@@ -79,8 +104,8 @@ async function onDrop(e: DragEvent) {
 
     const dir = handles.find((h) => h.kind === 'directory')
     if (dir) {
-      const count = await library.adoptFolderHandle(dir as FileSystemDirectoryHandle)
-      notifyScanResult(count)
+      const result = await library.adoptFolderHandle(dir as FileSystemDirectoryHandle)
+      notifyScanResult(result)
       return
     }
 
@@ -118,20 +143,12 @@ async function onDrop(e: DragEvent) {
       <input ref="folderInput" type="file" webkitdirectory hidden @change="onFolderFiles" />
 
       <VS2Button
-        v-if="library.folderSupported && !library.folderName"
+        v-if="!library.folderName"
         variant="secondary"
         block
-        @click="onLinkFolder"
+        @click="pickerBroken ? folderInput?.click() : onLinkFolder()"
       >
-        Link image folder
-      </VS2Button>
-      <VS2Button
-        v-else-if="!library.folderSupported"
-        variant="secondary"
-        block
-        @click="folderInput?.click()"
-      >
-        Import image folder
+        {{ pickerBroken ? 'Import image folder' : 'Link image folder' }}
       </VS2Button>
       <div v-else class="folder-row">
         <span class="v2-sm-text folder-name" :title="library.folderName">
