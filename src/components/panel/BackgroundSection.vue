@@ -7,7 +7,7 @@ import {
   VS2Select,
 } from '@thefamousgroup/vixi2-components'
 import { useLibraryStore } from '@/stores/library'
-import { useSettingsStore, type BackgroundType } from '@/stores/settings'
+import { FIT_OPTIONS, useSettingsStore, type BackgroundType } from '@/stores/settings'
 
 const settings = useSettingsStore()
 const library = useLibraryStore()
@@ -34,6 +34,15 @@ const backgroundRes = computed(() =>
     ? `${library.backgroundBitmap.width} × ${library.backgroundBitmap.height} px`
     : '',
 )
+
+const fitLabel = computed(
+  () => FIT_OPTIONS.find((f) => f.value === settings.backgroundFit)!.label,
+)
+
+function onFit(label: string) {
+  const found = FIT_OPTIONS.find((f) => f.label === label)
+  if (found) settings.backgroundFit = found.value
+}
 
 function onType(label: string) {
   const found = TYPES.find((t) => t.label === label)
@@ -115,6 +124,14 @@ async function onAsset(
             </VS2Button>
           </div>
         </div>
+
+        <VS2Select
+          v-if="library.backgroundUrl"
+          label="Fit"
+          :items="FIT_OPTIONS.map((f) => f.label)"
+          :model-value="fitLabel"
+          @update:model-value="onFit"
+        />
       </template>
     </div>
   </VS2CollapsableCard>

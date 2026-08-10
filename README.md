@@ -8,21 +8,26 @@ Everything runs locally in your browser. Images, the overlay, the background, an
 
 ## Features
 
-- **Image library** - drag-drop or upload any number of images, or link a folder on disk (Chrome/Edge). Linked folders can be rescanned as their contents change.
+- **Image library**
+  - Drag-drop or upload any number of images (png, jpg, webp, gif, avif, bmp). Uploads are saved in browser storage and survive refreshes.
+  - Link a folder on disk (Chrome/Edge): scans recursively up to 4 levels deep, can be rescanned as contents change, and reconnects after a refresh with one click. A whole folder can also be dragged straight onto the drop zone.
+  - In browsers that cannot link folders (including embedded browsers like the Cursor/VS Code preview), the button becomes "Import image folder" and copies the folder's images in as uploads instead.
+  - HEIC/HEIF photos cannot be decoded by browsers; scans report them so empty results are explained. Convert to JPG first.
+  - Thumbnail grid with filename on hover, per-image remove, and clear-all.
 - **Canvas** - exact 720p (1280x720), 1080p (1920x1080), or 4K (3840x2160) output resolution; the preview scales to your window but rendering always happens at full resolution.
-- **Grid** - tile size, tile aspect ratio (1:1, 2:3, 3:4, 9:16, 3:2, 4:3, 16:9), uniform or brick-offset pattern, and spacing between tiles (defaults to 0, butted together).
+- **Grid** - tile size (20-800 px), tile aspect ratio (1:1, 2:3, 3:4, 9:16, 3:2, 4:3, 16:9), uniform or brick-offset pattern, and spacing between tiles (defaults to 0, butted together).
 - **Motion**
   - *Static* - a fixed mosaic.
   - *Dissolve* - tiles crossfade to new random images on a staggered schedule (interval + fade duration controls).
-  - *Slide* - the whole field drifts in any direction (presets or a free 0-355 degree angle, plus speed). Tiles wrap around and repopulate with fresh images so there are never blank spots.
+  - *Slide* - the whole field drifts in any direction (presets or a free 0-355 degree angle, plus speed) with smooth sub-pixel motion. Tiles wrap around and repopulate with fresh images so there are never blank spots.
   - Image picking uses a shuffle-bag: every image appears once before any repeats, and adjacent duplicates are avoided.
-- **Background** - solid color or an uploaded image behind the tiles (visible through gaps and transparency).
-- **Overlay** - a transparent PNG stretched over the whole canvas, with a show/hide toggle.
-- **Recording** - 15 seconds to 10 minutes at 30 or 60 fps, saved as H.264 MP4 (WebM fallback on browsers without MP4 recording support).
+- **Background** - solid color (inline picker with theme swatches) or an uploaded image behind the tiles, with a fit mode: stretch to fill, fill (crop), or fit inside.
+- **Overlay** - a transparent PNG drawn on top of the mosaic with the same three fit modes (default: stretch), plus a show/hide toggle. Uploaded overlay and background images show a native-aspect preview with their pixel dimensions.
+- **Recording** - 15 seconds to 10 minutes at 30 or 60 fps, saved as H.264 MP4 (WebM fallback on browsers without MP4 recording support). The resolution is locked while recording, and the tab warns before closing mid-recording. Recording is realtime, so keep the tab visible; quality depends on the machine keeping up (1080p/30 is a safe choice).
 
 ## Requirements
 
-Chrome or Edge is recommended: folder linking uses the File System Access API and MP4 recording uses MediaRecorder's MP4 support, both Chromium-only. Other browsers can still upload images and record WebM.
+Chrome or Edge is recommended: live folder linking uses the File System Access API and MP4 recording uses MediaRecorder's MP4 support, both Chromium-only. Other browsers can still upload images or import folders, and record WebM.
 
 ## Development
 
@@ -38,8 +43,10 @@ Deploys happen automatically to GitHub Pages on every push to `main` (see `.gith
 
 ## Project layout
 
-- `src/engine/MosaicEngine.ts` - canvas renderer: grid layout, shuffle-bag image assignment, static/dissolve/slide motion, background + overlay compositing.
+- `src/engine/MosaicEngine.ts` - canvas renderer: grid layout, shuffle-bag image assignment, static/dissolve/slide motion, background + overlay compositing with fit modes.
 - `src/engine/recorder.ts` - canvas captureStream + MediaRecorder MP4 recording and download.
 - `src/stores/settings.ts` - all control-panel settings, persisted to localStorage.
 - `src/stores/library.ts` - image/overlay/background assets and the linked folder handle, persisted to IndexedDB.
-- `src/components/panel/` - the right-hand control panel sections.
+- `src/stores/recording.ts` - shared recording-active flag so panels can lock unsafe controls.
+- `src/components/panel/` - the right-hand control panel sections (Images, Canvas, Grid, Motion, Background, Overlay, Record).
+- `src/db.ts` - IndexedDB helpers (idb-keyval).

@@ -4,14 +4,24 @@ import {
   VS2AssetUploader,
   VS2Button,
   VS2CollapsableCard,
+  VS2Select,
   VS2Switch,
 } from '@thefamousgroup/vixi2-components'
 import { useLibraryStore } from '@/stores/library'
-import { useSettingsStore } from '@/stores/settings'
+import { FIT_OPTIONS, useSettingsStore } from '@/stores/settings'
 
 const settings = useSettingsStore()
 const library = useLibraryStore()
 const open = ref(true)
+
+const fitLabel = computed(
+  () => FIT_OPTIONS.find((f) => f.value === settings.overlayFit)!.label,
+)
+
+function onFit(label: string) {
+  const found = FIT_OPTIONS.find((f) => f.label === label)
+  if (found) settings.overlayFit = found.value
+}
 
 const overlayRes = computed(() =>
   library.overlayBitmap ? `${library.overlayBitmap.width} × ${library.overlayBitmap.height} px` : '',
@@ -35,7 +45,7 @@ async function onAsset(
   <VS2CollapsableCard v-model="open" title="Overlay">
     <div class="section-body">
       <span class="v2-xs-text" style="color: rgb(var(--v-theme-light-gray-100))">
-        Transparent PNG drawn on top of the mosaic, stretched to the canvas.
+        Transparent PNG drawn on top of the mosaic.
       </span>
 
       <div class="uploader-box">
@@ -58,6 +68,14 @@ async function onAsset(
           <VS2Button variant="destructive" @click="library.setOverlay(null)">Remove</VS2Button>
         </div>
       </div>
+
+      <VS2Select
+        v-if="library.overlayUrl"
+        label="Fit"
+        :items="FIT_OPTIONS.map((f) => f.label)"
+        :model-value="fitLabel"
+        @update:model-value="onFit"
+      />
 
       <VS2Switch
         v-model="settings.overlayVisible"

@@ -6,6 +6,13 @@ export type GridPattern = 'grid' | 'brick'
 /** Tile aspect ratio expressed as "w:h" (e.g. "2:3"). */
 export type CellShape = string
 export type BackgroundType = 'color' | 'image'
+export type FitMode = 'stretch' | 'cover' | 'contain'
+
+export const FIT_OPTIONS: { label: string; value: FitMode }[] = [
+  { label: 'Stretch to fill', value: 'stretch' },
+  { label: 'Fill (crop to fit)', value: 'cover' },
+  { label: 'Fit inside (no crop)', value: 'contain' },
+]
 
 export const CELL_SHAPES: { label: string; value: CellShape }[] = [
   { label: 'Square (1:1)', value: '1:1' },
@@ -45,7 +52,9 @@ export interface SettingsState {
   dissolveFade: number
   backgroundType: BackgroundType
   backgroundColor: string
+  backgroundFit: FitMode
   overlayVisible: boolean
+  overlayFit: FitMode
   recordDuration: number
   recordFps: number
 }
@@ -65,7 +74,9 @@ const DEFAULTS: SettingsState = {
   dissolveFade: 1.2,
   backgroundType: 'color',
   backgroundColor: '#1B1B1B',
+  backgroundFit: 'cover',
   overlayVisible: true,
+  overlayFit: 'stretch',
   recordDuration: 30,
   recordFps: 30,
 }

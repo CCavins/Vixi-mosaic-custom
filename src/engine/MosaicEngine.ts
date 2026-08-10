@@ -1,5 +1,5 @@
 import type { MosaicImage } from '@/stores/library'
-import { cellAspect, type SettingsState } from '@/stores/settings'
+import { cellAspect, type FitMode, type SettingsState } from '@/stores/settings'
 
 /**
  * Random image dispenser that hands out every image once (in shuffled order)
@@ -185,7 +185,7 @@ export class MosaicEngine {
     ctx.fillRect(0, 0, W, H)
     if (s.backgroundType === 'image') {
       const bg = this.getBackground()
-      if (bg) this.drawCover(bg, 0, 0, W, H, 1)
+      if (bg) this.drawFit(bg, s.backgroundFit)
     }
 
     if (images.size > 0) {
@@ -225,7 +225,23 @@ export class MosaicEngine {
     ctx.globalAlpha = 1
     if (s.overlayVisible) {
       const overlay = this.getOverlay()
-      if (overlay) ctx.drawImage(overlay, 0, 0, W, H)
+      if (overlay) this.drawFit(overlay, s.overlayFit)
+    }
+  }
+
+  /** Draw a bitmap across the whole canvas using the chosen fit mode. */
+  private drawFit(bmp: ImageBitmap, fit: FitMode) {
+    const W = this.canvas.width
+    const H = this.canvas.height
+    if (fit === 'stretch') {
+      this.ctx.drawImage(bmp, 0, 0, W, H)
+    } else if (fit === 'cover') {
+      this.drawCover(bmp, 0, 0, W, H, 1)
+    } else {
+      const scale = Math.min(W / bmp.width, H / bmp.height)
+      const w = bmp.width * scale
+      const h = bmp.height * scale
+      this.ctx.drawImage(bmp, (W - w) / 2, (H - h) / 2, w, h)
     }
   }
 
