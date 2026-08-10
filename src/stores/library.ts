@@ -4,9 +4,16 @@ import { db, type StoredUpload } from '@/db'
 export interface MosaicImage {
   id: string
   name: string
+  /** File size in bytes; name+size identifies duplicates. */
+  size: number
   bitmap: ImageBitmap
   thumbUrl: string
   source: 'upload' | 'folder'
+}
+
+export interface AddResult {
+  added: number
+  duplicates: number
 }
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif|bmp)$/i
@@ -64,13 +71,32 @@ export const useLibraryStore = defineStore('library', {
       this.initStarted = true
 
       const uploads = (await db.getUploads()) ?? []
+
+      // Heal libraries that accumulated duplicates before dedup existed:
+      // keep the first of every name+size pair.
+      const seen = new Set<string>()
+      const unique = uploads.filter((u) => {
+        const key = `${u.name}|${u.blob.size}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      if (unique.length !== uploads.length) {
+        try {
+          await db.setUploads(unique)
+        } catch {
+          // Cleanup is best-effort.
+        }
+      }
+
       const decoded: MosaicImage[] = []
-      for (const stored of uploads) {
+      for (const stored of unique) {
         try {
           const bitmap = await decodeBitmap(stored.blob, MAX_TILE_DECODE)
           decoded.push({
             id: stored.id,
             name: stored.name,
+            size: stored.blob.size,
             bitmap,
             thumbUrl: URL.createObjectURL(stored.blob),
             source: 'upload',
@@ -111,23 +137,33 @@ export const useLibraryStore = defineStore('library', {
       this.initialized = true
     },
 
-    async addFiles(files: Iterable<File>): Promise<number> {
+    async addFiles(files: Iterable<File>): Promise<AddResult> {
       const stored = (await db.getUploads()) ?? []
       const added: StoredUpload[] = []
       const decoded: MosaicImage[] = []
+      // Same name + same byte size counts as a duplicate (also within this batch).
+      const seen = new Set(this.images.map((img) => `${img.name}|${img.size}`))
+      let duplicates = 0
       for (const file of files) {
         if (!file.type.startsWith('image/') && !IMAGE_EXT.test(file.name)) continue
+        const key = `${file.name}|${file.size}`
+        if (seen.has(key)) {
+          duplicates++
+          continue
+        }
         const entry: StoredUpload = { id: crypto.randomUUID(), name: file.name, blob: file }
         try {
           const bitmap = await decodeBitmap(file, MAX_TILE_DECODE)
           decoded.push({
             id: entry.id,
             name: entry.name,
+            size: file.size,
             bitmap,
             thumbUrl: URL.createObjectURL(file),
             source: 'upload',
           })
           added.push(entry)
+          seen.add(key)
         } catch {
           // Not a decodable image; skip.
         }
@@ -135,7 +171,7 @@ export const useLibraryStore = defineStore('library', {
       // Push in one batch so the mosaic reshuffles once, not per file.
       if (decoded.length) this.images.push(...decoded)
       if (added.length) await db.setUploads([...stored, ...added])
-      return decoded.length
+      return { added: decoded.length, duplicates }
     },
 
     async removeImage(id: string) {
@@ -200,6 +236,8 @@ export const useLibraryStore = defineStore('library', {
       if (!handle) return result
       this.removeFolderImages()
       const decoded: MosaicImage[] = []
+      // Skip files that already exist as uploads (same name + size).
+      const seen = new Set(this.images.map((img) => `${img.name}|${img.size}`))
 
       const walk = async (dir: FileSystemDirectoryHandle, prefix: string, depth: number) => {
         try {
@@ -214,14 +252,18 @@ export const useLibraryStore = defineStore('library', {
             } else if (IMAGE_EXT.test(entry.name)) {
               try {
                 const file = await entry.getFile()
+                const key = `${file.name}|${file.size}`
+                if (seen.has(key)) continue
                 const bitmap = await decodeBitmap(file, MAX_TILE_DECODE)
                 decoded.push({
                   id: `folder:${prefix}${entry.name}`,
                   name: entry.name,
+                  size: file.size,
                   bitmap,
                   thumbUrl: URL.createObjectURL(file),
                   source: 'folder',
                 })
+                seen.add(key)
               } catch {
                 result.failed++
               }

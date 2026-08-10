@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { VS2Button, VS2CollapsableCard, useNotifications } from '@thefamousgroup/vixi2-components'
-import { useLibraryStore, type ScanResult } from '@/stores/library'
+import { useLibraryStore, type AddResult, type ScanResult } from '@/stores/library'
 
 const library = useLibraryStore()
 const notify = useNotifications()
@@ -16,14 +16,22 @@ const dragging = ref(false)
 const IS_EMBEDDED = navigator.userAgent.includes('Electron')
 const pickerBroken = ref(IS_EMBEDDED || !library.folderSupported)
 
-async function addFiles(files: Iterable<File>): Promise<number> {
+async function addFiles(files: Iterable<File>): Promise<AddResult> {
   try {
     return await library.addFiles(files)
   } catch (err) {
     // Most likely a storage quota failure: images show now but will not survive a refresh.
     console.error(err)
     notify.error('Could not save images to browser storage. They may disappear on refresh.')
-    return 0
+    return { added: 0, duplicates: 0 }
+  }
+}
+
+function notifyDuplicates(result: AddResult) {
+  if (result.duplicates > 0) {
+    notify.success(
+      `Added ${result.added} image${result.added === 1 ? '' : 's'}, skipped ${result.duplicates} duplicate${result.duplicates === 1 ? '' : 's'}.`,
+    )
   }
 }
 
@@ -72,18 +80,65 @@ async function onRescan() {
 
 async function onFiles(e: Event) {
   const input = e.target as HTMLInputElement
-  if (input.files?.length) await addFiles(input.files)
+  if (input.files?.length) notifyDuplicates(await addFiles(input.files))
   input.value = ''
+}
+
+function notifyImportResult(result: AddResult) {
+  if (result.added > 0) {
+    notify.success(
+      `Imported ${result.added} image${result.added === 1 ? '' : 's'}` +
+        (result.duplicates
+          ? `, skipped ${result.duplicates} duplicate${result.duplicates === 1 ? '' : 's'}`
+          : '') +
+        '.',
+    )
+  } else if (result.duplicates > 0) {
+    notify.error(`All ${result.duplicates} images were already in the library.`)
+  } else {
+    notify.error('No supported images found in that folder.')
+  }
 }
 
 async function onFolderFiles(e: Event) {
   const input = e.target as HTMLInputElement
-  if (input.files?.length) {
-    const count = await addFiles(input.files)
-    if (count > 0) notify.success(`Imported ${count} image${count === 1 ? '' : 's'} from the folder.`)
-    else notify.error('No supported images found in that folder.')
-  }
+  if (input.files?.length) notifyImportResult(await addFiles([...input.files]))
   input.value = ''
+}
+
+/** Read every entry of a directory reader (batches of ~100 until exhausted). */
+function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  return new Promise((resolve) => {
+    const out: FileSystemEntry[] = []
+    const step = () =>
+      reader.readEntries(
+        (batch) => {
+          if (!batch.length) return resolve(out)
+          out.push(...batch)
+          step()
+        },
+        () => resolve(out),
+      )
+    step()
+  })
+}
+
+async function entryFiles(entry: FileSystemEntry, depth: number): Promise<File[]> {
+  if (entry.isFile) {
+    return new Promise((resolve) =>
+      (entry as FileSystemFileEntry).file(
+        (file) => resolve([file]),
+        () => resolve([]),
+      ),
+    )
+  }
+  if (entry.isDirectory && depth <= 4) {
+    const children = await readAllEntries((entry as FileSystemDirectoryEntry).createReader())
+    const out: File[] = []
+    for (const child of children) out.push(...(await entryFiles(child, depth + 1)))
+    return out
+  }
+  return []
 }
 
 async function onDrop(e: DragEvent) {
@@ -91,38 +146,35 @@ async function onDrop(e: DragEvent) {
   const dt = e.dataTransfer
   if (!dt) return
 
-  // Prefer file-system handles (Chromium): lets a dropped FOLDER become a live link.
-  if (dt.items?.length && 'getAsFileSystemHandle' in DataTransferItem.prototype) {
-    // Must be requested synchronously, before the drop event data is gone.
-    const handlePromises: Promise<FileSystemHandle | null>[] = []
+  // Entries must be grabbed synchronously before the drop data is released.
+  const entries: FileSystemEntry[] = []
+  const plainFiles: File[] = []
+  let droppedFolder = false
+  if (dt.items?.length) {
     for (const item of dt.items) {
-      if (item.kind === 'file') handlePromises.push(item.getAsFileSystemHandle())
-    }
-    const handles = (await Promise.all(handlePromises)).filter(
-      (h): h is FileSystemHandle => h !== null,
-    )
-
-    const dir = handles.find((h) => h.kind === 'directory')
-    if (dir) {
-      const result = await library.adoptFolderHandle(dir as FileSystemDirectoryHandle)
-      notifyScanResult(result)
-      return
-    }
-
-    const files: File[] = []
-    for (const h of handles) {
-      if (h.kind !== 'file') continue
-      try {
-        files.push(await (h as FileSystemFileHandle).getFile())
-      } catch {
-        // Skip unreadable entries.
+      if (item.kind !== 'file') continue
+      const entry = item.webkitGetAsEntry?.()
+      if (entry) {
+        if (entry.isDirectory) droppedFolder = true
+        entries.push(entry)
+      } else {
+        const file = item.getAsFile()
+        if (file) plainFiles.push(file)
       }
     }
-    if (files.length) await addFiles(files)
-    return
+  } else {
+    plainFiles.push(...dt.files)
   }
 
-  if (dt.files.length) await addFiles(dt.files)
+  const files: File[] = [...plainFiles]
+  for (const entry of entries) files.push(...(await entryFiles(entry, 0)))
+  if (!files.length && !droppedFolder) return
+
+  // Dropped folders import their images as uploads - same as the folder
+  // import button - rather than creating a live folder link.
+  const result = await addFiles(files)
+  if (droppedFolder) notifyImportResult(result)
+  else notifyDuplicates(result)
 }
 </script>
 
