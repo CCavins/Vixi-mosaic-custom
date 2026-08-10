@@ -33,6 +33,19 @@ export function cellAspect(shape: CellShape): number {
   return h > 0 ? w / h : 1
 }
 
+const DECODE_TIERS = [160, 320, 640, 1280]
+
+/**
+ * Bitmap decode size appropriate for a tile size. Keeping decoded bitmaps
+ * close to their drawn size is what keeps motion smooth: hundreds of large
+ * bitmaps both exhaust memory and make every draw an expensive downscale.
+ * 1.5x covers the tallest cell shape (2:3) with cover-cropping.
+ */
+export function decodeTierFor(tileSize: number): number {
+  const needed = tileSize * 1.5
+  return DECODE_TIERS.find((t) => t >= needed) ?? DECODE_TIERS[DECODE_TIERS.length - 1]
+}
+
 export const RESOLUTIONS: Record<ResolutionKey, { width: number; height: number; label: string }> = {
   '720p': { width: 1280, height: 720, label: 'HD 720p (1280 x 720)' },
   '1080p': { width: 1920, height: 1080, label: 'Full HD 1080p (1920 x 1080)' },

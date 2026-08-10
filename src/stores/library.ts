@@ -1,12 +1,17 @@
 import { defineStore } from 'pinia'
 import { db, type StoredUpload } from '@/db'
+import { decodeTierFor, useSettingsStore } from '@/stores/settings'
 
 export interface MosaicImage {
   id: string
   name: string
   /** File size in bytes; name+size identifies duplicates. */
   size: number
+  /** Original file, kept so bitmaps can be re-decoded at a different size. */
+  blob: Blob
   bitmap: ImageBitmap
+  /** Decode target the current bitmap was produced for. */
+  decodedFor: number
   thumbUrl: string
   source: 'upload' | 'folder'
 }
@@ -19,8 +24,6 @@ export interface AddResult {
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif|bmp)$/i
 /** iPhone photo formats that browsers cannot decode; counted so we can explain empty scans. */
 const HEIC_EXT = /\.(heic|heif)$/i
-/** Tiles never render larger than this, so cap decoded size to keep memory sane. */
-const MAX_TILE_DECODE = 1280
 const MAX_FOLDER_DEPTH = 4
 const MAX_FOLDER_IMAGES = 2000
 
@@ -55,6 +58,8 @@ export const useLibraryStore = defineStore('library', {
     folderNeedsReconnect: false,
     initialized: false,
     initStarted: false,
+    decodeTarget: 640,
+    retargetToken: 0,
   }),
   getters: {
     imageMap(state): Map<string, MosaicImage> {
@@ -69,6 +74,8 @@ export const useLibraryStore = defineStore('library', {
       // Guard against re-entry (e.g. component remounts during dev HMR).
       if (this.initStarted) return
       this.initStarted = true
+
+      this.decodeTarget = decodeTierFor(useSettingsStore().tileSize)
 
       const uploads = (await db.getUploads()) ?? []
 
@@ -92,12 +99,14 @@ export const useLibraryStore = defineStore('library', {
       const decoded: MosaicImage[] = []
       for (const stored of unique) {
         try {
-          const bitmap = await decodeBitmap(stored.blob, MAX_TILE_DECODE)
+          const bitmap = await decodeBitmap(stored.blob, this.decodeTarget)
           decoded.push({
             id: stored.id,
             name: stored.name,
             size: stored.blob.size,
+            blob: stored.blob,
             bitmap,
+            decodedFor: this.decodeTarget,
             thumbUrl: URL.createObjectURL(stored.blob),
             source: 'upload',
           })
@@ -153,12 +162,14 @@ export const useLibraryStore = defineStore('library', {
         }
         const entry: StoredUpload = { id: crypto.randomUUID(), name: file.name, blob: file }
         try {
-          const bitmap = await decodeBitmap(file, MAX_TILE_DECODE)
+          const bitmap = await decodeBitmap(file, this.decodeTarget)
           decoded.push({
             id: entry.id,
             name: entry.name,
             size: file.size,
+            blob: file,
             bitmap,
+            decodedFor: this.decodeTarget,
             thumbUrl: URL.createObjectURL(file),
             source: 'upload',
           })
@@ -254,12 +265,14 @@ export const useLibraryStore = defineStore('library', {
                 const file = await entry.getFile()
                 const key = `${file.name}|${file.size}`
                 if (seen.has(key)) continue
-                const bitmap = await decodeBitmap(file, MAX_TILE_DECODE)
+                const bitmap = await decodeBitmap(file, this.decodeTarget)
                 decoded.push({
                   id: `folder:${prefix}${entry.name}`,
                   name: entry.name,
                   size: file.size,
+                  blob: file,
                   bitmap,
+                  decodedFor: this.decodeTarget,
                   thumbUrl: URL.createObjectURL(file),
                   source: 'folder',
                 })
@@ -296,6 +309,34 @@ export const useLibraryStore = defineStore('library', {
         }
       }
       this.images = this.images.filter((i) => i.source !== 'folder')
+    },
+
+    /**
+     * Re-decode every bitmap for a new tile size so draws stay cheap and
+     * memory stays proportional to what is on screen. Runs in the background;
+     * the mosaic keeps rendering the old bitmaps until each swap.
+     */
+    async retargetBitmaps(target: number) {
+      if (target === this.decodeTarget) return
+      this.decodeTarget = target
+      const token = ++this.retargetToken
+      for (const img of this.images) {
+        if (this.retargetToken !== token || this.decodeTarget !== target) return
+        if (img.decodedFor === target) continue
+        try {
+          const fresh = await decodeBitmap(img.blob, target)
+          if (this.retargetToken !== token) {
+            fresh.close()
+            return
+          }
+          const old = img.bitmap
+          img.bitmap = fresh
+          img.decodedFor = target
+          old.close()
+        } catch {
+          // Keep the old bitmap if re-decoding fails.
+        }
+      }
     },
 
     async setOverlay(file: File | null) {

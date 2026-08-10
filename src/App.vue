@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { VS2Notification } from '@thefamousgroup/vixi2-components'
 import ControlPanel from '@/components/ControlPanel.vue'
 import { MosaicEngine } from '@/engine/MosaicEngine'
 import { useLibraryStore } from '@/stores/library'
-import { RESOLUTIONS, useSettingsStore } from '@/stores/settings'
+import { RESOLUTIONS, decodeTierFor, useSettingsStore } from '@/stores/settings'
 
 const settings = useSettingsStore()
 const library = useLibraryStore()
@@ -33,6 +33,17 @@ let engine: MosaicEngine | null = null
 let resizeObserver: ResizeObserver | null = null
 
 settings.$subscribe(() => settings.persist())
+
+// When the tile size settles after a change, re-decode bitmaps to match so
+// slide motion stays smooth without needing a page refresh.
+let retargetTimer = 0
+watch(
+  () => settings.tileSize,
+  (size) => {
+    window.clearTimeout(retargetTimer)
+    retargetTimer = window.setTimeout(() => library.retargetBitmaps(decodeTierFor(size)), 400)
+  },
+)
 
 onMounted(() => {
   library.init()
