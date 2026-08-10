@@ -87,6 +87,7 @@ export class MosaicEngine {
   ) {
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Canvas 2D context unavailable')
+    ctx.imageSmoothingQuality = 'high'
     this.ctx = ctx
   }
 
@@ -266,13 +267,14 @@ export class MosaicEngine {
     m: Metrics,
     images: Map<string, MosaicImage>,
   ) {
-    const x = c * m.pitchX + this.ox + this.brickOffset(r, s, m)
-    const y = r * m.pitchY + this.oy
-    // Snap to whole pixels so butted-up tiles never show hairline seams.
-    const px = Math.round(x)
-    const py = Math.round(y)
-    const pw = Math.round(x + m.cellW) - px
-    const ph = Math.round(y + m.cellH) - py
+    // Sub-pixel positions keep slow slides smooth (whole-pixel snapping made
+    // the field visibly jump one pixel at a time). When tiles are butted
+    // together, a slight bleed hides the antialiased seams between them.
+    const bleed = s.gap === 0 ? 0.75 : 0
+    const px = c * m.pitchX + this.ox + this.brickOffset(r, s, m)
+    const py = r * m.pitchY + this.oy
+    const pw = m.cellW + bleed
+    const ph = m.cellH + bleed
 
     const img = cell.imgId ? images.get(cell.imgId) : undefined
     if (!img) return
