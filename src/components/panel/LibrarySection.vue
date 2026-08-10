@@ -1,22 +1,42 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { VS2Button, VS2CollapsableCard } from '@thefamousgroup/vixi2-components'
+import { VS2Button, VS2CollapsableCard, useNotifications } from '@thefamousgroup/vixi2-components'
 import { useLibraryStore } from '@/stores/library'
 
 const library = useLibraryStore()
+const notify = useNotifications()
 const open = ref(true)
 const fileInput = ref<HTMLInputElement | null>(null)
 const dragging = ref(false)
 
+async function addFiles(files: Iterable<File>) {
+  try {
+    await library.addFiles(files)
+  } catch (err) {
+    // Most likely a storage quota failure: images show now but will not survive a refresh.
+    console.error(err)
+    notify.error('Could not save images to browser storage. They may disappear on refresh.')
+  }
+}
+
 async function onFiles(e: Event) {
   const input = e.target as HTMLInputElement
-  if (input.files?.length) await library.addFiles(input.files)
+  if (input.files?.length) await addFiles(input.files)
   input.value = ''
 }
 
 async function onDrop(e: DragEvent) {
   dragging.value = false
-  if (e.dataTransfer?.files.length) await library.addFiles(e.dataTransfer.files)
+  if (e.dataTransfer?.files.length) await addFiles(e.dataTransfer.files)
+}
+
+async function onLinkFolder() {
+  try {
+    await library.linkFolder()
+  } catch (err) {
+    console.error(err)
+    notify.error('Could not link that folder.')
+  }
 }
 </script>
 
@@ -36,12 +56,7 @@ async function onDrop(e: DragEvent) {
       <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="onFiles" />
 
       <template v-if="library.folderSupported">
-        <VS2Button
-          v-if="!library.folderName"
-          variant="secondary"
-          block
-          @click="library.linkFolder()"
-        >
+        <VS2Button v-if="!library.folderName" variant="secondary" block @click="onLinkFolder">
           Link image folder
         </VS2Button>
         <div v-else class="folder-row">

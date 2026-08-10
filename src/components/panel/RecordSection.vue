@@ -14,10 +14,12 @@ import {
   type RecordingHandle,
 } from '@/engine/recorder'
 import { useLibraryStore } from '@/stores/library'
+import { useRecordingStore } from '@/stores/recording'
 import { useSettingsStore } from '@/stores/settings'
 
 const settings = useSettingsStore()
 const library = useLibraryStore()
+const recordingStore = useRecordingStore()
 const notify = useNotifications()
 
 const canvasRef = inject<Ref<HTMLCanvasElement | null>>('mosaicCanvas')
@@ -45,6 +47,18 @@ const progress = computed(() =>
   Math.min(100, (elapsed.value / settings.recordDuration) * 100),
 )
 
+// Warn before closing the tab while a recording is in progress.
+function beforeUnloadGuard(e: BeforeUnloadEvent) {
+  e.preventDefault()
+}
+
+function setRecording(active: boolean) {
+  recording.value = active
+  recordingStore.active = active
+  if (active) window.addEventListener('beforeunload', beforeUnloadGuard)
+  else window.removeEventListener('beforeunload', beforeUnloadGuard)
+}
+
 function start() {
   const canvas = canvasRef?.value
   if (!canvas) return
@@ -52,25 +66,28 @@ function start() {
   handle = startRecording(canvas, settings.recordFps, settings.recordDuration, {
     onProgress: (sec) => (elapsed.value = sec),
     onDone: (result) => {
-      recording.value = false
+      setRecording(false)
       handle = null
       downloadRecording(result, settings.resolution)
       notify.success(`Saved ${result.extension.toUpperCase()} recording.`)
     },
     onError: (message) => {
-      recording.value = false
+      setRecording(false)
       handle = null
       notify.error(message)
     },
   })
-  if (handle) recording.value = true
+  if (handle) setRecording(true)
 }
 
 function stop() {
   handle?.stop()
 }
 
-onBeforeUnmount(() => handle?.cancel())
+onBeforeUnmount(() => {
+  handle?.cancel()
+  setRecording(false)
+})
 </script>
 
 <template>

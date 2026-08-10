@@ -76,6 +76,7 @@ export class MosaicEngine {
   private ox = 0
   private oy = 0
   private layoutKey = ''
+  private lastMode = ''
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -140,6 +141,17 @@ export class MosaicEngine {
       this.cells.clear()
       this.ox = 0
       this.oy = 0
+    }
+
+    // Entering dissolve mode: existing cells carry stale swap times, which
+    // would make every tile change at once. Re-stagger them from now.
+    if (s.motionMode !== this.lastMode) {
+      if (s.motionMode === 'dissolve') {
+        for (const cell of this.cells.values()) {
+          cell.nextSwapAt = t + s.dissolveInterval * 1000 * (0.5 + Math.random())
+        }
+      }
+      this.lastMode = s.motionMode
     }
 
     if (s.motionMode === 'slide' && images.size > 0) {

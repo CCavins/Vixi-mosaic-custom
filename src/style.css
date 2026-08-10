@@ -254,6 +254,25 @@ body,
   }
 }
 
+/* Small screens: stack the panel under the stage instead of clipping it */
+@media (max-width: 900px) {
+  .app-layout {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .stage {
+    flex: none;
+    height: 45vh;
+  }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    overflow-y: visible;
+    border-left: none;
+    border-top: 1px solid rgb(var(--v-theme-border-gray));
+  }
+}
+
 /* Tone down Vuetify slider details/ticks inside the panel */
 .sidebar .v-slider.v-input--horizontal {
   margin-inline: 4px;
