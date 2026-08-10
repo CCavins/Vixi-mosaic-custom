@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import {
   VS2AssetUploader,
+  VS2Button,
   VS2CollapsableCard,
   VS2Select,
 } from '@thefamousgroup/vixi2-components'
@@ -28,6 +29,12 @@ const TYPES: { label: string; value: BackgroundType }[] = [
 
 const typeLabel = computed(() => TYPES.find((t) => t.value === settings.backgroundType)!.label)
 
+const backgroundRes = computed(() =>
+  library.backgroundBitmap
+    ? `${library.backgroundBitmap.width} × ${library.backgroundBitmap.height} px`
+    : '',
+)
+
 function onType(label: string) {
   const found = TYPES.find((t) => t.label === label)
   if (found) settings.backgroundType = found.value
@@ -46,14 +53,6 @@ async function onAsset(
   }
 }
 
-async function onClear(resolve: () => void, reject: (reason?: unknown) => void) {
-  try {
-    await library.setBackgroundImage(null)
-    resolve()
-  } catch (err) {
-    reject(err)
-  }
-}
 </script>
 
 <template>
@@ -94,21 +93,29 @@ async function onClear(resolve: () => void, reject: (reason?: unknown) => void) 
         </v-expand-transition>
       </template>
 
-      <div v-else class="uploader-box">
-        <!-- key forces a remount: VS2AssetView captures src once at setup -->
-        <VS2AssetUploader
-          :key="library.backgroundUrl"
-          alt="Background image"
-          :src="library.backgroundUrl || undefined"
-          :size-limit-m-b="50"
-          :types="['image/jpeg', 'image/png', 'image/webp', 'image/gif']"
-          asset-type="image"
-          height="120px"
-          width="100%"
-          @update:asset="onAsset"
-          @update:clear="onClear"
-        />
-      </div>
+      <template v-else>
+        <div class="uploader-box">
+          <VS2AssetUploader
+            alt="Background image"
+            :size-limit-m-b="50"
+            :types="['image/jpeg', 'image/png', 'image/webp', 'image/gif']"
+            asset-type="image"
+            height="96px"
+            width="100%"
+            @update:asset="onAsset"
+          />
+        </div>
+
+        <div v-if="library.backgroundUrl" class="asset-preview">
+          <img :src="library.backgroundUrl" alt="Background preview" />
+          <div class="asset-preview-meta">
+            <span class="v2-xs-text">{{ backgroundRes }}</span>
+            <VS2Button variant="destructive" @click="library.setBackgroundImage(null)">
+              Remove
+            </VS2Button>
+          </div>
+        </div>
+      </template>
     </div>
   </VS2CollapsableCard>
 </template>
