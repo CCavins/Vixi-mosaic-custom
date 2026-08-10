@@ -34,7 +34,7 @@ function onShape(label: string) {
           <span class="v2-sm-text">Tile size</span>
           <span class="v2-xs-text field-value">{{ settings.tileSize }}px</span>
         </div>
-        <VS2Slider v-model="settings.tileSize" :min="60" :max="800" :step="10" />
+        <VS2Slider v-model="settings.tileSize" :min="20" :max="800" :step="10" />
       </div>
 
       <div class="field">
