@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { VS2CollapsableCard, VS2Select, VS2Slider } from '@thefamousgroup/vixi2-components'
-import { useSettingsStore, type CellShape, type GridPattern } from '@/stores/settings'
+import { CELL_SHAPES, useSettingsStore, type GridPattern } from '@/stores/settings'
 
 const settings = useSettingsStore()
 const open = ref(true)
@@ -10,21 +10,18 @@ const PATTERNS: { label: string; value: GridPattern }[] = [
   { label: 'Uniform grid', value: 'grid' },
   { label: 'Brick (offset rows)', value: 'brick' },
 ]
-const SHAPES: { label: string; value: CellShape }[] = [
-  { label: 'Square', value: 'square' },
-  { label: 'Landscape (16:9)', value: 'landscape' },
-  { label: 'Portrait (3:4)', value: 'portrait' },
-]
 
 const patternLabel = computed(() => PATTERNS.find((p) => p.value === settings.gridPattern)!.label)
-const shapeLabel = computed(() => SHAPES.find((s) => s.value === settings.cellShape)!.label)
+const shapeLabel = computed(
+  () => CELL_SHAPES.find((s) => s.value === settings.cellShape)?.label ?? settings.cellShape,
+)
 
 function onPattern(label: string) {
   const found = PATTERNS.find((p) => p.label === label)
   if (found) settings.gridPattern = found.value
 }
 function onShape(label: string) {
-  const found = SHAPES.find((s) => s.label === label)
+  const found = CELL_SHAPES.find((s) => s.label === label)
   if (found) settings.cellShape = found.value
 }
 </script>
@@ -57,7 +54,7 @@ function onShape(label: string) {
 
       <VS2Select
         label="Tile shape"
-        :items="SHAPES.map((s) => s.label)"
+        :items="CELL_SHAPES.map((s) => s.label)"
         :model-value="shapeLabel"
         @update:model-value="onShape"
       />

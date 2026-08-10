@@ -3,8 +3,28 @@ import { defineStore } from 'pinia'
 export type ResolutionKey = '720p' | '1080p' | '4k'
 export type MotionMode = 'static' | 'dissolve' | 'slide'
 export type GridPattern = 'grid' | 'brick'
-export type CellShape = 'square' | 'landscape' | 'portrait'
+/** Tile aspect ratio expressed as "w:h" (e.g. "2:3"). */
+export type CellShape = string
 export type BackgroundType = 'color' | 'image'
+
+export const CELL_SHAPES: { label: string; value: CellShape }[] = [
+  { label: 'Square (1:1)', value: '1:1' },
+  { label: 'Portrait (2:3)', value: '2:3' },
+  { label: 'Portrait (3:4)', value: '3:4' },
+  { label: 'Portrait (9:16)', value: '9:16' },
+  { label: 'Landscape (3:2)', value: '3:2' },
+  { label: 'Landscape (4:3)', value: '4:3' },
+  { label: 'Landscape (16:9)', value: '16:9' },
+]
+
+/** Parse a "w:h" shape into width/height aspect; defaults to square. */
+export function cellAspect(shape: CellShape): number {
+  const match = /^(\d+):(\d+)$/.exec(shape)
+  if (!match) return 1
+  const w = Number(match[1])
+  const h = Number(match[2])
+  return h > 0 ? w / h : 1
+}
 
 export const RESOLUTIONS: Record<ResolutionKey, { width: number; height: number; label: string }> = {
   '720p': { width: 1280, height: 720, label: 'HD 720p (1280 x 720)' },
@@ -36,7 +56,7 @@ const DEFAULTS: SettingsState = {
   resolution: '1080p',
   tileSize: 240,
   gridPattern: 'grid',
-  cellShape: 'square',
+  cellShape: '2:3',
   gap: 0,
   motionMode: 'slide',
   slideAngle: 45,
@@ -50,11 +70,21 @@ const DEFAULTS: SettingsState = {
   recordFps: 30,
 }
 
+/** Older builds stored named shapes instead of "w:h" ratios. */
+const LEGACY_SHAPES: Record<string, CellShape> = {
+  square: '1:1',
+  landscape: '16:9',
+  portrait: '3:4',
+}
+
 function loadPersisted(): SettingsState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULTS }
-    return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<SettingsState>) }
+    const state = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<SettingsState>) }
+    state.cellShape = LEGACY_SHAPES[state.cellShape] ?? state.cellShape
+    if (!/^\d+:\d+$/.test(state.cellShape)) state.cellShape = DEFAULTS.cellShape
+    return state
   } catch {
     return { ...DEFAULTS }
   }

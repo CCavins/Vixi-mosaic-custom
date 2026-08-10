@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import {
   VS2AssetUploader,
   VS2CollapsableCard,
-  VS2ColorPicker,
   VS2Select,
 } from '@thefamousgroup/vixi2-components'
 import { useLibraryStore } from '@/stores/library'
@@ -12,6 +11,15 @@ import { useSettingsStore, type BackgroundType } from '@/stores/settings'
 const settings = useSettingsStore()
 const library = useLibraryStore()
 const open = ref(true)
+const pickerOpen = ref(false)
+
+// vixi theme palette for quick picks
+const SWATCHES = [
+  ['#000000', '#1B1B1B', '#262626'],
+  ['#333333', '#5D5E60', '#C5C5C5'],
+  ['#FFFFFF', '#D52265', '#FEC651'],
+  ['#4DBD74', '#51D9FE', '#FF5E4E'],
+]
 
 const TYPES: { label: string; value: BackgroundType }[] = [
   { label: 'Solid color', value: 'color' },
@@ -58,10 +66,33 @@ async function onClear(resolve: () => void, reject: (reason?: unknown) => void) 
         @update:model-value="onType"
       />
 
-      <div v-if="settings.backgroundType === 'color'" class="field-row">
-        <span class="v2-sm-text">Background color</span>
-        <VS2ColorPicker v-model="settings.backgroundColor" />
-      </div>
+      <template v-if="settings.backgroundType === 'color'">
+        <div class="field-row color-row" @click="pickerOpen = !pickerOpen">
+          <span class="v2-sm-text">Background color</span>
+          <div class="color-row-right">
+            <span class="v2-xs-text color-hex">{{ settings.backgroundColor }}</span>
+            <div
+              class="color-swatch"
+              :style="{ backgroundColor: settings.backgroundColor }"
+            ></div>
+          </div>
+        </div>
+        <v-expand-transition>
+          <div v-show="pickerOpen">
+            <v-color-picker
+              v-model="settings.backgroundColor"
+              mode="hex"
+              :modes="['hex', 'rgb']"
+              show-swatches
+              :swatches="SWATCHES"
+              swatches-max-height="120"
+              elevation="0"
+              width="100%"
+              class="bg-color-picker"
+            />
+          </div>
+        </v-expand-transition>
+      </template>
 
       <div v-else class="uploader-box">
         <!-- key forces a remount: VS2AssetView captures src once at setup -->

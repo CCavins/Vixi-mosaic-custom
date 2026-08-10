@@ -10,7 +10,7 @@ Everything runs locally in your browser. Images, the overlay, the background, an
 
 - **Image library** - drag-drop or upload any number of images, or link a folder on disk (Chrome/Edge). Linked folders can be rescanned as their contents change.
 - **Canvas** - exact 720p (1280x720), 1080p (1920x1080), or 4K (3840x2160) output resolution; the preview scales to your window but rendering always happens at full resolution.
-- **Grid** - tile size, tile shape (square / 16:9 / 3:4), uniform or brick-offset pattern, and spacing between tiles (defaults to 0, butted together).
+- **Grid** - tile size, tile aspect ratio (1:1, 2:3, 3:4, 9:16, 3:2, 4:3, 16:9), uniform or brick-offset pattern, and spacing between tiles (defaults to 0, butted together).
 - **Motion**
   - *Static* - a fixed mosaic.
   - *Dissolve* - tiles crossfade to new random images on a staggered schedule (interval + fade duration controls).

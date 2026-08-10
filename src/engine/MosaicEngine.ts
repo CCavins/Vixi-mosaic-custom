@@ -1,5 +1,5 @@
 import type { MosaicImage } from '@/stores/library'
-import type { SettingsState } from '@/stores/settings'
+import { cellAspect, type SettingsState } from '@/stores/settings'
 
 /**
  * Random image dispenser that hands out every image once (in shuffled order)
@@ -111,7 +111,7 @@ export class MosaicEngine {
   }
 
   private metrics(s: SettingsState): Metrics {
-    const aspect = s.cellShape === 'landscape' ? 16 / 9 : s.cellShape === 'portrait' ? 3 / 4 : 1
+    const aspect = cellAspect(s.cellShape)
     const cellW = Math.max(20, s.tileSize)
     const cellH = cellW / aspect
     return { cellW, cellH, pitchX: cellW + s.gap, pitchY: cellH + s.gap }
